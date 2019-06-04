@@ -71,6 +71,8 @@
     double _currentdBHL;
     double _dBHLStepUpSize;
     double _dBHLStepDownSize;
+    double _dBHLInitialPresentationLevelImprovement;
+    double _dBHLMinimumThreshold;
     int _currentTestIndex;
     int _indexOfFreqLoopList;
     int _numberOfTransitionsPerFreq;
@@ -130,12 +132,14 @@
     _currentdBHL = [self dBHLToneAudiometryStep].initialdBHLValue;
     _dBHLStepDownSize = [self dBHLToneAudiometryStep].dBHLStepDownSize;
     _dBHLStepUpSize = [self dBHLToneAudiometryStep].dBHLStepUpSize;
+    _dBHLInitialPresentationLevelImprovement = [self dBHLToneAudiometryStep].dBHLInitialPresentationLevelImprovement;
+    _dBHLMinimumThreshold = [self dBHLToneAudiometryStep].dBHLMinimumThreshold;
     
     self.dBHLToneAudiometryContentView = [[ORKdBHLToneAudiometryContentView alloc] init];
     self.activeStepView.activeCustomView = self.dBHLToneAudiometryContentView;
     
     [self.dBHLToneAudiometryContentView.tapButton addTarget:self action:@selector(tapButtonPressed) forControlEvents:UIControlEventTouchDown];
-
+    
     _audioChannel = [self dBHLToneAudiometryStep].earPreference;
     _audioGenerator = [[ORKdBHLToneAudiometryAudioGenerator alloc] initForHeadphones:[self dBHLToneAudiometryStep].headphoneType];
     _audioGenerator.delegate = self;
@@ -218,6 +222,7 @@
     }
     
     if (_prevFreq != [freq doubleValue]) {
+        
         CGFloat progress = 0.001 + (CGFloat)_indexOfFreqLoopList / _freqLoopList.count;
         [self.dBHLToneAudiometryContentView setProgress:progress
                                                animated:YES];
@@ -229,7 +234,7 @@
         _transitionsDictionary = nil;
         _transitionsDictionary = [NSMutableDictionary dictionary];
         if (_resultSample) {
-           _resultSample.units = [_arrayOfResultUnits copy];
+            _resultSample.units = [_arrayOfResultUnits copy];
         }
         _arrayOfResultUnits = [NSMutableArray array];
         _prevFreq = [freq doubleValue];
@@ -286,7 +291,7 @@
     });
     // adding 0.2 seconds to account for the fadeInDuration which is being set in ORKdBHLToneAudiometryAudioGenerator
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((preStimulusDelay + toneDuration + 0.2) * NSEC_PER_SEC)), dispatch_get_main_queue(), _pulseDurationWorkBlock);
-
+    
     ORKWeakTypeOf(self)weakSelf = self;
     _postStimulusDelayWorkBlock = dispatch_block_create(DISPATCH_BLOCK_INHERIT_QOS_CLASS, ^{
         ORKStrongTypeOf(self) strongSelf = weakSelf;
@@ -298,9 +303,13 @@
                 newTransition.userInitiated -= 1;
                 [_transitionsDictionary setObject:newTransition forKey:[NSNumber numberWithFloat:_currentdBHL]];
             }
+            if (_currentdBHL == [self dBHLToneAudiometryStep].initialdBHLValue && !_ackOnce) {
+                // rdar://51306138 Initial presentation level improvement
+                _currentdBHL = _currentdBHL + _dBHLInitialPresentationLevelImprovement;
+            } else {
+                _currentdBHL = _currentdBHL + _dBHLStepUpSize;
+            }
             
-            _currentdBHL = _currentdBHL + _dBHLStepUpSize;
-
             if (currentTransition) {
                 currentTransition.userInitiated -= 1;
             }
@@ -311,10 +320,11 @@
         }
     });
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)((preStimulusDelay + toneDuration + postStimulusDelay) * NSEC_PER_SEC)), dispatch_get_main_queue(), _postStimulusDelayWorkBlock);
-
+    
 }
 
 - (void)tapButtonPressed {
+    BOOL isFirstTap = _ackOnce;
     _ackOnce = YES;
     [_hapticFeedback impactOccurred];
     _currentTestIndex += 1;
@@ -329,6 +339,17 @@
         NSNumber *currentKey = [NSNumber numberWithFloat:_currentdBHL];
         ORKdBHLToneAudiometryTransitions *currentTransitionObject = [_transitionsDictionary objectForKey:currentKey];
         currentTransitionObject.userInitiated -= 1;
+        // it's a miss
+        if (_currentdBHL == [self dBHLToneAudiometryStep].initialdBHLValue && isFirstTap) {
+            // rdar://51306138 Initial presentation level improvement
+            // it's possible for the user to miss the first interaction
+            _currentdBHL = _currentdBHL + _dBHLInitialPresentationLevelImprovement;
+        } else {
+            // rdar://51305885 False response click should not attenuate and instead of that, increase the dBHL
+            _currentdBHL = _currentdBHL + _dBHLStepUpSize;
+        }
+        [self estimatedBHLAndPlayToneWithFrequency:_freqLoopList[_indexOfFreqLoopList]];
+        return;
     } else if ([self validateResultFordBHL:_currentdBHL]) {
         _resultSample.calculatedThreshold = _currentdBHL;
         _indexOfFreqLoopList += 1;
@@ -343,6 +364,10 @@
         }
     }
     _currentdBHL = _currentdBHL - _dBHLStepDownSize;
+    if (_currentdBHL < _dBHLMinimumThreshold) {
+        // rdar://51305554 Minimum threshold parameter
+        // Ask for Kuba help to clarify this.
+    }
     [self estimatedBHLAndPlayToneWithFrequency:_freqLoopList[_indexOfFreqLoopList]];
     return;
 }

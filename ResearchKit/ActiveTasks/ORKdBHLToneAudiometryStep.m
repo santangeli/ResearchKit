@@ -42,6 +42,8 @@
 #define ORKdBHLToneAudiometryTaskInitialdBHLValue 30.0
 #define ORKdBHLToneAudiometryTaskdBHLStepUpSize 5.0
 #define ORKdBHLToneAudiometryTaskdBHLStepDownSize 10.0
+#define ORKdBHLToneAudiometryTaskdBHLInitialPresentationLevelImprovement 15.0
+#define ORKdBHLToneAudiometryTaskdBHLMinimumThreshold -10.0
 
 @implementation ORKdBHLToneAudiometryStep
 
@@ -65,6 +67,8 @@
     self.initialdBHLValue = ORKdBHLToneAudiometryTaskInitialdBHLValue;
     self.dBHLStepUpSize = ORKdBHLToneAudiometryTaskdBHLStepUpSize;
     self.dBHLStepDownSize = ORKdBHLToneAudiometryTaskdBHLStepDownSize;
+    self.dBHLInitialPresentationLevelImprovement = ORKdBHLToneAudiometryTaskdBHLInitialPresentationLevelImprovement;
+    self.dBHLMinimumThreshold = ORKdBHLToneAudiometryTaskdBHLMinimumThreshold;
     self.frequencyList = @[@1000.0, @2000.0, @3000.0, @4000.0, @8000.0, @1000.0, @500.0, @250.0];
 }
 
@@ -78,7 +82,7 @@
         @throw [NSException exceptionWithName:NSInvalidArgumentException reason:[NSString stringWithFormat:@"number of transitions per frequency cannot be less than or equal to 0"]  userInfo:nil];
     }
     if ((self.dBHLStepDownSize <= 0) || self.dBHLStepUpSize <=0) {
-       @throw [NSException exceptionWithName:NSInvalidArgumentException reason:[NSString stringWithFormat:@"step size cannot be less than or equal to 0"]  userInfo:nil];
+        @throw [NSException exceptionWithName:NSInvalidArgumentException reason:[NSString stringWithFormat:@"step size cannot be less than or equal to 0"]  userInfo:nil];
     }
     if (self.frequencyList.count == 0) {
         @throw [NSException exceptionWithName:NSInvalidArgumentException reason:[NSString stringWithFormat:@"frequency list cannot be empty"]  userInfo:nil];
